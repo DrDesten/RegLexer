@@ -124,16 +124,16 @@ const regex = new RegLexer.RegexBuilder()
 
         new Token( "LParen", /\(/ ),
         new Token( "RParen", /\)/ ),
-        new Token( "Plus", /\+/ ),
-        new Token( "Minus", /\-/ ),
-        new Token( "Star", /\*/ ),
-        new Token( "Slash", /\// ),
+        new Token( "Plus", /\+/, {}, { precedence: 0 } ),
+        new Token( "Minus", /\-/, {}, { precedence: 0 } ),
+        new Token( "Star", /\*/, {}, { precedence: 1 } ),
+        new Token( "Slash", /\//, {}, { precedence: 1 } ),
     ] )
     .build()
 
 console.log( regex )
 
 const lexer = new RegLexer( regex )
-const tokens = lexer.lex( "1+1" )
+const tokens = lexer.lex( "1+2-3*4/5" )
 
 console.log( tokens )
