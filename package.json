@@ -11,5 +11,6 @@
     "regex"
   ],
   "author": "DrDesten",
-  "license": "ISC"
+  "license": "ISC",
+  "type": "module"
 }
