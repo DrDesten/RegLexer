@@ -6,48 +6,70 @@ class Token {
      * @param {RegExp} pattern Token Pattern
      * @param {Object} properties
      * @param {boolean} properties.skip Skip Token
-     * @param {{}} user_properties User-Defined Properties to Attach to Token
+     * @param {Object} user_properties User-Defined Properties to Attach to Token
      */
     constructor( name, pattern, { skip = false } = {}, user_properties = {} ) {
         this.name = name
         this.pattern = pattern
-        this.skip = skip
+        this.properties = {}
+        this.properties.skip = skip
         this.user_properties = user_properties
-
-        this.string = ""
     }
 }
 
 class RegLexer {
+    static get Token() {
+        return class Token {
+            /**
+             * @param {string} name
+             * @param {string} string
+             * @param {Object} properties
+             * @param {Object} user_properties
+             */
+            constructor( name, string, properties, user_properties ) {
+                this.name = name
+                this.string = string
+                this.properties = properties
+                this.user_properties = user_properties
+            }
+        }
+    }
+
     static get JSONEncoder() {
-        return {
+        return class JSONEncoder {
             /** @param {string} string */
-            encode( string ) {
+            static encode( string ) {
                 return string.split( "" )
                     .map( char => "_" + char.charCodeAt().toString( 32 ) )
                     .join( "" )
-            },
+            }
             /** @param {string} string */
-            decode( string ) {
+            static decode( string ) {
                 return string.split( "_" )
                     .map( substr => substr && String.fromCharCode( parseInt( substr, 32 ) ) )
                     .join( "" )
-            },
+            }
         }
     }
 
 
     static get RegexBuilder() {
-        return class {
+        return class RegexBuilder {
             constructor() {
                 this.builder = new RegExer
             }
 
             /** @param {Token} token The Token to add */
             addToken( token ) {
+                const pattern = token.pattern
+                delete token.pattern
+
+                if ( Object.keys( token.user_properties ).length === 0 )
+                    delete token.user_properties
+
                 const serialized = JSON.stringify( token )
                 const encoded = RegLexer.JSONEncoder.encode( serialized )
-                this.builder.group( encoded, token.pattern )
+                this.builder.group( encoded, pattern )
                 return this
             }
             /** @param {Token[]} tokens The Tokens to add */
@@ -83,11 +105,11 @@ class RegLexer {
             }
 
             const tokenMatch = Object.entries( match.groups ).find( ( [key, value] ) => value !== undefined )
-            const token = JSON.parse( RegLexer.JSONEncoder.decode( tokenMatch[0] ) )
-            token.string = tokenMatch[1]
+            const tokenJSON = JSON.parse( RegLexer.JSONEncoder.decode( tokenMatch[0] ) )
+            const token = new RegLexer.Token( tokenJSON.name, tokenMatch[1], tokenJSON.properties, tokenJSON.user_properties ?? {} )
 
             string = string.substring( token.string.length )
-            if ( !token.skip ) tokens.push( token )
+            if ( !token.properties.skip ) tokens.push( token )
         }
 
         return tokens
