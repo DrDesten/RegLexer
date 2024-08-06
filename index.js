@@ -1,98 +1,107 @@
 import { RegExer } from "./regexer.js"
 
-class Token {
-    /**
-     * @param {string} name Token Name
-     * @param {RegExp} pattern Token Pattern
-     * @param {Object} properties
-     * @param {boolean} properties.skip Skip Token
-     * @param {Object} user_properties User-Defined Properties to Attach to Token
-     */
-    constructor( name, pattern, { skip = false } = {}, user_properties = {} ) {
+function isObjectLiteral( x ) {
+    return Object.getPrototypeOf( x ) === Object.prototype
+}
+
+/**
+ * @typedef {{[property: string]: any, ignore: boolean, merge: boolean}} TokenProperties
+ */
+/**
+ * @template {string} T
+ */
+export class Token {
+    /** @param {T} name @param {string} text */
+    constructor( name, text ) {
         this.name = name
-        this.pattern = pattern
-        this.properties = {}
-        this.properties.skip = skip
-        this.user_properties = user_properties
+        this.text = text
+        /** @type {TokenProperties} */
+        this.props = {
+            ignore: false,
+            merge: false
+        }
+    }
+
+    toString() {
+        return this.text
     }
 }
 
-class RegLexer {
-    static get Token() {
-        return class Token {
-            /**
-             * @param {string} name
-             * @param {string} string
-             * @param {Object} properties
-             * @param {Object} user_properties
-             */
-            constructor( name, string, properties, user_properties ) {
-                this.name = name
-                this.string = string
-                this.properties = properties
-                this.user_properties = user_properties
-            }
-        }
+/**
+ * @typedef {(token: Token, match: RegExpExecArray) => void} TokenMatchParser
+ */
+/**
+ * @template {string} T
+ */
+export class TokenMatcher {
+    /** @param {TokenProperties|TokenMatchParser} obj @returns {TokenMatchParser} */
+    static createParserFunction( obj ) {
+        if ( typeof obj === "function" ) return obj
+        return token => Object.assign( token.props, obj )
     }
 
-    static get JSONEncoder() {
-        return class JSONEncoder {
-            /** @param {string} string */
-            static encode( string ) {
-                return string.split( "" )
-                    .map( char => "_" + char.charCodeAt().toString( 32 ) )
-                    .join( "" )
-            }
-            /** @param {string} string */
-            static decode( string ) {
-                return string.split( "_" )
-                    .map( substr => substr && String.fromCharCode( parseInt( substr, 32 ) ) )
-                    .join( "" )
-            }
-        }
+    /** @param {T} name @param {RegExp} regex @param {TokenProperties|TokenMatchParser} [parser] */
+    constructor( name, regex, parser = () => {} ) {
+        this.name = name
+        this.regex = regex
+        this.parser = TokenMatcher.createParserFunction( parser )
     }
+}
 
-
-    static get RegexBuilder() {
-        return class RegexBuilder {
-            constructor() {
-                this.builder = new RegExer
-            }
-
-            /** @param {Token} token The Token to add */
-            addToken( token ) {
-                const pattern = token.pattern
-                delete token.pattern
-
-                if ( Object.keys( token.user_properties ).length === 0 )
-                    delete token.user_properties
-
-                const serialized = JSON.stringify( token )
-                const encoded = RegLexer.JSONEncoder.encode( serialized )
-                this.builder.group( encoded, pattern )
-                return this
-            }
-            /** @param {Token[]} tokens The Tokens to add */
-            addTokens( tokens ) {
-                for ( const token of tokens )
-                    this.addToken( token )
-                return this
-            }
-
-            /** @param {string|undefined} flags */
-            build( flags ) {
-                return this.builder.build( flags )
-            }
-        }
-    }
-
-
-    /** @param {RegExp} regex */
-    constructor( regex ) {
-        this.regex = RegExp( "^" + "(" + RegExer.toPatternString( regex ) + ")" )
-    }
-
+class JSONEncoder {
     /** @param {string} string */
+    static encode( string ) {
+        return string.split( "" )
+            .map( char => "_" + char.charCodeAt().toString( 32 ) )
+            .join( "" )
+    }
+    /** @param {string} string */
+    static decode( string ) {
+        return string.split( "_" )
+            .map( substr => substr && String.fromCharCode( parseInt( substr, 32 ) ) )
+            .join( "" )
+    }
+}
+
+class RegexBuilder {
+    constructor() {
+        this.builder = new RegExer
+        this.parsers = []
+    }
+
+    /** @param {TokenMatcher} token The Token to add */
+    addToken( token ) {
+        const regex = token.regex
+        const parser = this.parsers.push( token.parser ) - 1
+        const serialized = JSON.stringify( { name: token.name, parser: parser } )
+        const encoded = JSONEncoder.encode( serialized )
+        this.builder.group( encoded, regex )
+        return this
+    }
+    /** @param {TokenMatcher[]} tokens The Tokens to add */
+    addTokens( tokens ) {
+        for ( const token of tokens )
+            this.addToken( token )
+        return this
+    }
+
+    /** @param {string|undefined} flags */
+    build( flags ) {
+        return this.builder.build( flags )
+    }
+}
+
+/**
+ * @template {string} T
+ */
+export class RegLexer {
+    /** @param {TokenMatcher<T>[]} tokens */
+    constructor( tokens ) {
+        this.builder = new RegexBuilder().addTokens( tokens )
+        this.regex = RegExp( "^" + "(" + RegExer.toPatternString( this.builder.build() ) + ")" )
+    }
+
+    /** @param {string} string @returns {(Token<T>|Error)[]} */
     lex( string ) {
 
         const tokens = []
@@ -104,36 +113,15 @@ class RegLexer {
                 continue
             }
 
-            const tokenMatch = Object.entries( match.groups ).find( ( [key, value] ) => value !== undefined )
-            const tokenJSON = JSON.parse( RegLexer.JSONEncoder.decode( tokenMatch[0] ) )
-            const token = new RegLexer.Token( tokenJSON.name, tokenMatch[1], tokenJSON.properties, tokenJSON.user_properties ?? {} )
+            const tokenMatch = Object.entries( match.groups ).find( ( [_, value] ) => value !== undefined )
+            const tokenJSON = JSON.parse( JSONEncoder.decode( tokenMatch[0] ) )
+            const token = new Token( tokenJSON.name, tokenMatch[1] )
+            this.builder.parsers[tokenJSON.parser]( token, tokenMatch )
 
-            string = string.substring( token.string.length )
-            if ( !token.properties.skip ) tokens.push( token )
+            string = string.substring( token.text.length )
+            if ( !token.props.ignore ) tokens.push( token )
         }
 
         return tokens
     }
 }
-
-const regex = new RegLexer.RegexBuilder()
-    .addTokens( [
-        new Token( "Whitespace", /\s/, { skip: true } ),
-
-        new Token( "Number", /\d+/ ),
-
-        new Token( "LParen", /\(/ ),
-        new Token( "RParen", /\)/ ),
-        new Token( "Plus", /\+/, {}, { precedence: 0 } ),
-        new Token( "Minus", /\-/, {}, { precedence: 0 } ),
-        new Token( "Star", /\*/, {}, { precedence: 1 } ),
-        new Token( "Slash", /\//, {}, { precedence: 1 } ),
-    ] )
-    .build()
-
-console.log( regex )
-
-const lexer = new RegLexer( regex )
-const tokens = lexer.lex( "1+2-3*4/5" )
-
-console.log( tokens )
