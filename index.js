@@ -255,10 +255,20 @@ export class Parser {
         ) )
     }
 
-    /** @param {Token<T>[]} tokens The tokens to parse */
-    constructor( tokens ) {
+    /** 
+     * @param {Token<T>[]} tokens The tokens to parse 
+     * @param {T} errorToken The type of the error token. 
+     * @param {T} eofToken The type of the EOF token. 
+     **/
+    constructor( tokens, errorToken, eofToken ) {
         this.tokens = tokens
         this.index = 0
+        this.errorToken = errorToken
+        this.eofToken = eofToken
+    }
+
+    eof() {
+        return this.index >= this.tokens.length || this.peek().type === this.eofToken
     }
 
     /** @param {number} [lookahead=0] */
