@@ -30,6 +30,8 @@ export class Position {
     clone() {
         return new Position( this.index, this.line, this.column )
     }
+
+    get [Symbol.toStringTag]() { return "Position" }
 }
 
 // Range class
@@ -52,6 +54,8 @@ export class Range {
     clone() {
         return new Range( this.start.clone(), this.end.clone() )
     }
+
+    get [Symbol.toStringTag]() { return "Range" }
 }
 
 // Token class
@@ -101,6 +105,8 @@ export class Token {
     toPrimitive() {
         return this.props.value ?? this.text
     }
+
+    get [Symbol.toStringTag]() { return "Token" }
 }
 
 // TokenMatcher class
@@ -125,6 +131,8 @@ export class TokenMatcher {
 export class Lexer {
     /** @returns {typeof Token<T>} */
     get Token() { return Token }
+    /** @returns {typeof Parser<T>} */
+    get Parser() { return Parser }
 
     /** 
      * Compiles the given matchers into a single regular expression.  
@@ -235,6 +243,18 @@ export class Lexer {
 // Parser class
 /** @template {string} T */
 export class Parser {
+    /** 
+     * Creates a map of node types to themselves.
+     * @template {string} T 
+     * @param {T[]} types The node types
+     * @returns {Readonly<{[K in T]: K}>} A map of node types to themselves
+     */
+    static Types( types ) {
+        return Object.freeze( Object.fromEntries(
+            types.map( t => [t, t] )
+        ) )
+    }
+
     /** @param {Token<T>[]} tokens The tokens to parse */
     constructor( tokens ) {
         this.tokens = tokens
