@@ -115,7 +115,7 @@ export class TokenMatcher {
     /** 
      * @param {T} type The type of the token
      * @param {RegExp} regex The regular expression to match the token
-     * @param {TokenProperties|(token: Token, match: RegExpExecArray) => void} parser The parser to use to parse the token
+     * @param {TokenProperties|(token: Token<T>, match: RegExpExecArray) => void} parser The parser to use to parse the token
      * @param {{[property:string]:any}} [props] The properties of the token
      */
     constructor( type, regex, parser, props = {} ) {
